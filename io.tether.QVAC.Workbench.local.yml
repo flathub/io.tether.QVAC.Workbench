@@ -1,0 +1,37 @@
+id: io.tether.QVAC.Workbench
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+command: run.sh
+base: org.electronjs.Electron2.BaseApp
+base-version: '25.08'
+build-options:
+  strip: false
+  no-debuginfo: true
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=x11
+  - --socket=pulseaudio
+  - --device=dri
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --env=ELECTRON_TRASH=gio
+  - --env=XCURSOR_PATH=/run/host/user-share/icons:/run/host/share/icons
+  - --talk-name=org.freedesktop.ScreenSaver
+  - --persist=.config/pear
+  - --persist=.qvac
+modules:
+  - name: qvac-workbench
+    only-arches:
+      - x86_64
+    buildsystem: simple
+    build-commands:
+      - install -Dm644 io.tether.QVAC.Workbench.metainfo.xml /app/share/metainfo/io.tether.QVAC.Workbench.metainfo.xml
+      - install -Dm644 io.tether.QVAC.Workbench.png /app/share/icons/hicolor/512x512/apps/io.tether.QVAC.Workbench.png
+      - install -Dm644 io.tether.QVAC.Workbench.desktop /app/share/applications/io.tether.QVAC.Workbench.desktop
+      - install -Dm755 run.sh $FLATPAK_DEST/bin/run.sh
+      - cp -a main $FLATPAK_DEST/main
+    sources:
+      - type: archive
+        path: /home/vboxuser/qvac-app-workbench-desktop/out/flatpak/flatpak-assets-0.5.0.tar.gz
+        strip-components: 0

@@ -1,0 +1,49 @@
+diff --git a/io.tether.QVAC.Workbench.yml b/io.tether.QVAC.Workbench.yml
+index 14c48f2..a363f74 100644
+--- a/io.tether.QVAC.Workbench.yml
++++ b/io.tether.QVAC.Workbench.yml
+@@ -1,8 +1,8 @@
+ id: io.tether.QVAC.Workbench
+-runtime: org.gnome.Platform
+-runtime-version: '49'
+-sdk: org.gnome.Sdk
+-command: qvac_workbench
++runtime: org.freedesktop.Platform
++runtime-version: '25.08'
++sdk: org.freedesktop.Sdk
++command: run.sh
+ base: org.electronjs.Electron2.BaseApp
+ base-version: '25.08'
+ build-options:
+@@ -13,14 +13,15 @@ finish-args:
+   - --share=network
+   - --socket=x11
+   - --socket=pulseaudio
+-  - --device=all
++  - --device=dri
+   - --talk-name=org.kde.StatusNotifierWatcher
++  - --env=ELECTRON_TRASH=gio
+   - --env=XCURSOR_PATH=/run/host/user-share/icons:/run/host/share/icons
+   - --talk-name=org.freedesktop.ScreenSaver
+   - --persist=.config/pear
+   - --persist=.qvac
+ modules:
+-  - name: qvac_workbench-x64
++  - name: qvac-workbench
+     only-arches:
+       - x86_64
+     buildsystem: simple
+@@ -28,9 +29,10 @@ modules:
+       - install -Dm644 io.tether.QVAC.Workbench.metainfo.xml /app/share/metainfo/io.tether.QVAC.Workbench.metainfo.xml
+       - install -Dm644 io.tether.QVAC.Workbench.png /app/share/icons/hicolor/512x512/apps/io.tether.QVAC.Workbench.png
+       - install -Dm644 io.tether.QVAC.Workbench.desktop /app/share/applications/io.tether.QVAC.Workbench.desktop
+-      - install -Dm755 qvac_workbench $FLATPAK_DEST/bin/qvac_workbench
++      - install -Dm755 run.sh $FLATPAK_DEST/bin/run.sh
++      - cp -a main $FLATPAK_DEST/main
+     sources:
+       - type: archive
+-        url: https://static.tether.dev/qvac/workbench/flatpak-assets-1.0.0.tar.gz
+-        sha512: bce96c60c1c49124fc83fda9034466691e12c8afbf26cf6ce0e24b44e3581665bd7123a06b4f0cc7b32e34d0f959ac219cd48fe62b78a68c315c236da1eb5273
++        url: https://static.tether.dev/qvac/workbench/flatpak-assets-0.5.0.tar.gz
++        sha512: ebc159062894d6d38f02814560a98fa87bb2c1b5a2067a15073b1e8550d251fdadc6ef2499f7320ea9acbd0de272089cd3fd5f3f76d79921774a0da7d27b0614
+         strip-components: 0
