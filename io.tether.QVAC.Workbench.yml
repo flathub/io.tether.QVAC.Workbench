@@ -16,11 +16,61 @@ finish-args:
   - --device=dri
   - --talk-name=org.kde.StatusNotifierWatcher
   - --env=ELECTRON_TRASH=gio
+  - --env=GTK_USE_PORTAL=1
   - --env=XCURSOR_PATH=/run/host/user-share/icons:/run/host/share/icons
   - --talk-name=org.freedesktop.ScreenSaver
   - --persist=.config/pear
   - --persist=.qvac
+
 modules:
+  # --- Node.js runtime (used by gws-cli and app helpers) ---
+  - name: node
+    only-arches:
+      - x86_64
+    buildsystem: simple
+    build-commands:
+      - cp -a bin lib include share /app/
+    sources:
+      - type: archive
+        url: https://nodejs.org/dist/v24.14.1/node-v24.14.1-linux-x64.tar.gz
+        # TODO: fill with actual sha256 from https://nodejs.org/dist/v24.14.1/SHASUMS256.txt
+        sha256: FILL_SHA256_FROM_NODEJS_SHASUMS
+        strip-components: 1
+
+  # --- Google Workspace CLI (pre-built tarball produced by build-flatpak-assets.sh) ---
+  - name: gws-cli
+    buildsystem: simple
+    build-commands:
+      - cp -a bin lib /app/
+    sources:
+      - type: archive
+        url: https://static.tether.dev/qvac/workbench/gws-cli.tar.gz
+        sha256: FILL_SHA256
+        strip-components: 1
+
+  # --- Obsidian (extracted from upstream .deb) ---
+  - name: obsidian
+    only-arches:
+      - x86_64
+    buildsystem: simple
+    build-commands:
+      - ar x obsidian.deb
+      - tar xf data.tar.*
+      - cp -a opt/Obsidian /app/obsidian
+      - rm -f /app/obsidian/chrome-sandbox
+      - install -Dm755 obsidian-wrapper /app/bin/obsidian
+    sources:
+      - type: file
+        url: https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.7/obsidian_1.12.7_amd64.deb
+        # TODO: fill with actual sha256 (curl -L <url> | sha256sum)
+        sha256: FILL_SHA256_FROM_OBSIDIAN_DEB
+        dest-filename: obsidian.deb
+      - type: script
+        dest-filename: obsidian-wrapper
+        commands:
+          - exec /app/obsidian/obsidian-cli "$@"
+
+  # --- QVAC Workbench (packaged Electron app + desktop integration) ---
   - name: qvac-workbench
     only-arches:
       - x86_64
@@ -29,10 +79,10 @@ modules:
       - install -Dm644 io.tether.QVAC.Workbench.metainfo.xml /app/share/metainfo/io.tether.QVAC.Workbench.metainfo.xml
       - install -Dm644 io.tether.QVAC.Workbench.png /app/share/icons/hicolor/512x512/apps/io.tether.QVAC.Workbench.png
       - install -Dm644 io.tether.QVAC.Workbench.desktop /app/share/applications/io.tether.QVAC.Workbench.desktop
-      - install -Dm755 run.sh $FLATPAK_DEST/bin/run.sh
-      - cp -a main $FLATPAK_DEST/main
+      - install -Dm755 run.sh /app/bin/run.sh
+      - cp -a main /app/main
     sources:
       - type: archive
         url: https://static.tether.dev/qvac/workbench/flatpak-assets-0.5.0.tar.gz
-        sha512: ebc159062894d6d38f02814560a98fa87bb2c1b5a2067a15073b1e8550d251fdadc6ef2499f7320ea9acbd0de272089cd3fd5f3f76d79921774a0da7d27b0614
+        sha512: COMPUTED_BY_BUILD_SCRIPT
         strip-components: 0
