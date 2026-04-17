@@ -81,6 +81,10 @@ modules:
     buildsystem: simple
     build-commands:
       - tar xzf flatpak-assets-0.5.1.tar.gz
+      - |
+        if ! grep -q 'type="vcs-browser"' io.tether.QVAC.Workbench.metainfo.xml; then
+          sed -i 's|</component>|  <url type="vcs-browser">https://github.com/flathub/io.tether.QVAC.Workbench</url>\n</component>|' io.tether.QVAC.Workbench.metainfo.xml
+        fi
       - install -Dm644 io.tether.QVAC.Workbench.metainfo.xml /app/share/metainfo/io.tether.QVAC.Workbench.metainfo.xml
       - install -Dm644 io.tether.QVAC.Workbench.png /app/share/icons/hicolor/512x512/apps/io.tether.QVAC.Workbench.png
       - install -Dm644 io.tether.QVAC.Workbench.desktop /app/share/applications/io.tether.QVAC.Workbench.desktop
