@@ -42,7 +42,8 @@ modules:
   - name: gws-cli
     buildsystem: simple
     build-commands:
-      - tar xzf gws-cli-0.5.1.tar.gz
+      - mkdir -p gws-cli-0.5.1
+      - tar xzf gws-cli-0.5.1.tar.gz -C gws-cli-0.5.1
       - cp -a gws-cli-0.5.1/bin gws-cli-0.5.1/lib /app/
     sources:
       - type: archive
