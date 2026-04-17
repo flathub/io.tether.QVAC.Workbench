@@ -48,7 +48,7 @@ modules:
     sources:
       - type: archive
         url: https://static.tether.dev/qvac/workbench/assets.tar.gz
-        sha512: 529efdf193e492d756bfb6b899847f0b5434e82d02ff8c96a3588baf8906c0ad39f3802c0ce5fe14c9a50c458747d0087dbe9f59a8bbe8efb4f76a1a2c996014
+        sha512: e7bf49fdfe7d97faf633881126fcbccfbcfd80ee8ca3c75a47c7004a85d793e48b949010cc57566cdf3e002045c2696214e0eca537ada712c12766ddf16f639c
         strip-components: 0
 
   # --- Obsidian (extracted from upstream .deb) ---
@@ -89,5 +89,5 @@ modules:
     sources:
       - type: archive
         url: https://static.tether.dev/qvac/workbench/assets.tar.gz
-        sha512: 529efdf193e492d756bfb6b899847f0b5434e82d02ff8c96a3588baf8906c0ad39f3802c0ce5fe14c9a50c458747d0087dbe9f59a8bbe8efb4f76a1a2c996014
+        sha512: e7bf49fdfe7d97faf633881126fcbccfbcfd80ee8ca3c75a47c7004a85d793e48b949010cc57566cdf3e002045c2696214e0eca537ada712c12766ddf16f639c
         strip-components: 0
