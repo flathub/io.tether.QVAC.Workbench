@@ -1,10 +1,10 @@
 id: io.tether.QVAC.Workbench
-runtime: org.gnome.Platform
-runtime-version: '49'
-sdk: org.gnome.Sdk
-command: qvac_workbench
+runtime: org.freedesktop.Platform
+runtime-version: "25.08"
+sdk: org.freedesktop.Sdk
+command: run.sh
 base: org.electronjs.Electron2.BaseApp
-base-version: '25.08'
+base-version: "25.08"
 build-options:
   strip: false
   no-debuginfo: true
@@ -13,24 +13,85 @@ finish-args:
   - --share=network
   - --socket=x11
   - --socket=pulseaudio
-  - --device=all
+  - --device=dri
   - --talk-name=org.kde.StatusNotifierWatcher
+  - --env=ELECTRON_TRASH=gio
+  - --env=GTK_USE_PORTAL=1
   - --env=XCURSOR_PATH=/run/host/user-share/icons:/run/host/share/icons
   - --talk-name=org.freedesktop.ScreenSaver
   - --persist=.config/pear
   - --persist=.qvac
+
 modules:
-  - name: qvac_workbench-x64
+  # --- Node.js runtime (used by gws-cli and app helpers) ---
+  - name: node
     only-arches:
       - x86_64
     buildsystem: simple
     build-commands:
+      - cp -a bin lib include share /app/
+    sources:
+      - type: archive
+        url: https://nodejs.org/dist/v24.14.1/node-v24.14.1-linux-x64.tar.gz
+        sha256: ace9fa104992ed0829642629c46ca7bd7fd6e76278cb96c958c4b387d29658ea
+        strip-components: 1
+
+  # --- Google Workspace CLI (pre-built tarball produced by build-flatpak-assets.sh) ---
+  # The outer assets.tar.gz is extracted by flatpak-builder; we then extract
+  # the inner gws-cli tarball and copy its contents into /app.
+  - name: gws-cli
+    buildsystem: simple
+    build-commands:
+      - mkdir -p gws-cli-0.5.1
+      - tar xzf gws-cli-0.5.1.tar.gz -C gws-cli-0.5.1
+      - cp -a gws-cli-0.5.1/bin gws-cli-0.5.1/lib /app/
+    sources:
+      - type: archive
+        url: https://static.tether.dev/qvac/workbench/assets-beta.tar.gz
+        sha512: TODO
+        strip-components: 0
+
+  # --- Obsidian (extracted from upstream .deb) ---
+  - name: obsidian
+    only-arches:
+      - x86_64
+    buildsystem: simple
+    build-commands:
+      - ar x obsidian.deb
+      - tar xf data.tar.*
+      - cp -a opt/Obsidian /app/obsidian
+      - rm -f /app/obsidian/chrome-sandbox
+      - install -Dm755 obsidian-wrapper /app/bin/obsidian
+    sources:
+      - type: file
+        url: https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.7/obsidian_1.12.7_amd64.deb
+        sha256: 3644e3ef19bcd23db4d17f7c73311b5245429391a2a48b361da93375f59712b0
+        dest-filename: obsidian.deb
+      - type: script
+        dest-filename: obsidian-wrapper
+        commands:
+          - exec /app/obsidian/obsidian-cli "$@"
+
+  # --- QVAC Workbench (packaged Electron app + desktop integration) ---
+  # Same outer assets.tar.gz as gws-cli; we extract the inner flatpak-assets
+  # tarball and install the desktop integration bits from it.
+  - name: qvac-workbench
+    only-arches:
+      - x86_64
+    buildsystem: simple
+    build-commands:
+      - tar xzf flatpak-assets-0.6.0.tar.gz
+      - |
+        if ! grep -q 'type="vcs-browser"' io.tether.QVAC.Workbench.metainfo.xml; then
+          sed -i 's|</component>|  <url type="vcs-browser">https://github.com/flathub/io.tether.QVAC.Workbench</url>\n</component>|' io.tether.QVAC.Workbench.metainfo.xml
+        fi
       - install -Dm644 io.tether.QVAC.Workbench.metainfo.xml /app/share/metainfo/io.tether.QVAC.Workbench.metainfo.xml
       - install -Dm644 io.tether.QVAC.Workbench.png /app/share/icons/hicolor/512x512/apps/io.tether.QVAC.Workbench.png
       - install -Dm644 io.tether.QVAC.Workbench.desktop /app/share/applications/io.tether.QVAC.Workbench.desktop
-      - install -Dm755 qvac_workbench $FLATPAK_DEST/bin/qvac_workbench
+      - install -Dm755 run.sh /app/bin/run.sh
+      - cp -a main /app/main
     sources:
       - type: archive
-        url: https://static.tether.dev/qvac/workbench/flatpak-assets-1.0.0.tar.gz
-        sha512: bce96c60c1c49124fc83fda9034466691e12c8afbf26cf6ce0e24b44e3581665bd7123a06b4f0cc7b32e34d0f959ac219cd48fe62b78a68c315c236da1eb5273
+        url: https://static.tether.dev/qvac/workbench/assets-beta.tar.gz
+        sha512: TODO
         strip-components: 0
