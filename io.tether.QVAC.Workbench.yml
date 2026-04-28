@@ -42,9 +42,9 @@ modules:
   - name: gws-cli
     buildsystem: simple
     build-commands:
-      - mkdir -p gws-cli-0.5.1
-      - tar xzf gws-cli-0.5.1.tar.gz -C gws-cli-0.5.1
-      - cp -a gws-cli-0.5.1/bin gws-cli-0.5.1/lib /app/
+      - mkdir -p gws-cli
+      - tar xzf gws-cli-0.6.0-production.0286.tar.gz -C gws-cli
+      - cp -a gws-cli/bin gws-cli/lib /app/
     sources:
       - type: archive
         url: https://static.tether.dev/qvac/workbench/QVAC.Workbench.linux.flatpak.tar.gz
@@ -80,7 +80,7 @@ modules:
       - x86_64
     buildsystem: simple
     build-commands:
-      - tar xzf flatpak-assets-0.6.0.tar.gz
+      - tar xzf flatpak-assets-0.6.0-production.0286.tar.gz
       - |
         if ! grep -q 'type="vcs-browser"' io.tether.QVAC.Workbench.metainfo.xml; then
           sed -i 's|</component>|  <url type="vcs-browser">https://github.com/flathub/io.tether.QVAC.Workbench</url>\n</component>|' io.tether.QVAC.Workbench.metainfo.xml
