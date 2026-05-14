@@ -51,7 +51,7 @@ modules:
       - x86_64
     buildsystem: simple
     build-commands:
-      - tar xzf flatpak-assets-0.6.0-production.0286.tar.gz
+      - tar xzf flatpak-assets-0.7.0-production.0317.tar.gz
       - |
         if ! grep -q 'type="vcs-browser"' io.tether.QVAC.Workbench.metainfo.xml; then
           sed -i 's|</component>|  <url type="vcs-browser">https://github.com/flathub/io.tether.QVAC.Workbench</url>\n</component>|' io.tether.QVAC.Workbench.metainfo.xml
