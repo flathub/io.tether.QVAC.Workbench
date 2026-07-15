@@ -19,7 +19,7 @@ finish-args:
   - --env=GTK_USE_PORTAL=1
   - --env=XCURSOR_PATH=/run/host/user-share/icons:/run/host/share/icons
   - --talk-name=org.freedesktop.ScreenSaver
-  - --persist=.config/pear
+  - --persist=.qvac-workbench
   - --persist=.qvac
 
 modules:
