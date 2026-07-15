@@ -36,21 +36,6 @@ modules:
         sha256: ace9fa104992ed0829642629c46ca7bd7fd6e76278cb96c958c4b387d29658ea
         strip-components: 1
 
-  # --- Google Workspace CLI (pre-built tarball produced by build-flatpak-assets.sh) ---
-  # The outer assets.tar.gz is extracted by flatpak-builder; we then extract
-  # the inner gws-cli tarball and copy its contents into /app.
-  - name: gws-cli
-    buildsystem: simple
-    build-commands:
-      - mkdir -p gws-cli
-      - tar xzf gws-cli-0.6.0-production.0286.tar.gz -C gws-cli
-      - cp -a gws-cli/bin gws-cli/lib /app/
-    sources:
-      - type: archive
-        url: https://static.tether.dev/qvac/workbench/QVAC.Workbench.linux.flatpak.tar.gz
-        sha512: 44f0490e6f5ecdc4e30ab52cc60edda4e1c0c1f25a4d121277ae6390f1ea0093471f9a356c689731a98f38fcb3ef5a38c81144026ae2e219ef8fee2e182a8549
-        strip-components: 0
-
   # --- Obsidian (extracted from upstream .deb) ---
   - name: obsidian
     only-arches:
@@ -80,7 +65,7 @@ modules:
       - x86_64
     buildsystem: simple
     build-commands:
-      - tar xzf flatpak-assets-0.6.0-production.0286.tar.gz
+      - tar xzf QV.AC-x64-flatpak.tar.gz
       - |
         if ! grep -q 'type="vcs-browser"' io.tether.QVAC.Workbench.metainfo.xml; then
           sed -i 's|</component>|  <url type="vcs-browser">https://github.com/flathub/io.tether.QVAC.Workbench</url>\n</component>|' io.tether.QVAC.Workbench.metainfo.xml
@@ -92,6 +77,6 @@ modules:
       - cp -a main /app/main
     sources:
       - type: archive
-        url: https://static.tether.dev/qvac/workbench/QVAC.Workbench.linux.flatpak.tar.gz
-        sha512: 44f0490e6f5ecdc4e30ab52cc60edda4e1c0c1f25a4d121277ae6390f1ea0093471f9a356c689731a98f38fcb3ef5a38c81144026ae2e219ef8fee2e182a8549
+        url: https://static.tether.dev/qv.ac/latest/QV.AC-x64-flatpak.tar.gz
+        sha512: 1232579f39b9ca5f79f272dd7661eaa61fc309085007175539e078928757370ed4114a67895d9ee2ef9bf90820a29b1053e35a8b6182dde1dede9910f030e903
         strip-components: 0
