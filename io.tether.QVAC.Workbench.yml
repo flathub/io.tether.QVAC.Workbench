@@ -19,7 +19,7 @@ finish-args:
   - --env=GTK_USE_PORTAL=1
   - --env=XCURSOR_PATH=/run/host/user-share/icons:/run/host/share/icons
   - --talk-name=org.freedesktop.ScreenSaver
-  - --persist=.config/pear
+  - --persist=.qvac-workbench
   - --persist=.qvac
 
 modules:
@@ -44,14 +44,12 @@ modules:
           - exec /app/obsidian/obsidian-cli "$@"
 
   # --- QVAC Workbench (packaged Electron app + desktop integration) ---
-  # Same outer assets.tar.gz as gws-cli; we extract the inner flatpak-assets
-  # tarball and install the desktop integration bits from it.
+  # The archive source is extracted by flatpak-builder before build commands run.
   - name: qvac-workbench
     only-arches:
       - x86_64
     buildsystem: simple
     build-commands:
-      - tar xzf flatpak-assets-0.7.0-production.0317.tar.gz
       - |
         if ! grep -q 'type="vcs-browser"' io.tether.QVAC.Workbench.metainfo.xml; then
           sed -i 's|</component>|  <url type="vcs-browser">https://github.com/flathub/io.tether.QVAC.Workbench</url>\n</component>|' io.tether.QVAC.Workbench.metainfo.xml
@@ -63,6 +61,6 @@ modules:
       - cp -a main /app/main
     sources:
       - type: archive
-        url: https://static.tether.dev/qvac/workbench/QVAC.Workbench.linux.flatpak.tar.gz
-        sha512: 53f43a464674944d603098c6eb474dcbe2de2aa130ea9459ce9b2eb6df67e70707de17c4aacede6a9a0b77bf4ea7fadad9fc1285d983d05b37f609ef22401819
+        url: https://static.tether.dev/qv.ac/latest/QV.AC-x64-flatpak.tar.gz
+        sha512: 240bb3c2c8d8df5fccf67a59893eb794906c7c4eaf3b5248c4e975bf6e3072ab02e89d9fa0365cdfc0de8406c1a93a95be3c33b0545b16d3cbca21f92479f697
         strip-components: 0
