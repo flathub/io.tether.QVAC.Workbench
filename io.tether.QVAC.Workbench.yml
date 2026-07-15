@@ -44,14 +44,12 @@ modules:
           - exec /app/obsidian/obsidian-cli "$@"
 
   # --- QVAC Workbench (packaged Electron app + desktop integration) ---
-  # Same outer assets.tar.gz as gws-cli; we extract the inner flatpak-assets
-  # tarball and install the desktop integration bits from it.
+  # The archive source is extracted by flatpak-builder before build commands run.
   - name: qvac-workbench
     only-arches:
       - x86_64
     buildsystem: simple
     build-commands:
-      - tar xzf QV.AC-x64-flatpak.tar.gz
       - |
         if ! grep -q 'type="vcs-browser"' io.tether.QVAC.Workbench.metainfo.xml; then
           sed -i 's|</component>|  <url type="vcs-browser">https://github.com/flathub/io.tether.QVAC.Workbench</url>\n</component>|' io.tether.QVAC.Workbench.metainfo.xml
