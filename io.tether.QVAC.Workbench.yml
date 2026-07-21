@@ -67,3 +67,4 @@ modules:
         x-checker-data:
           type: rotating-url
           url: https://static.tether.dev/qv.ac/latest/QV.AC-x64-flatpak.tar.gz
+          pattern: https://static\.tether\.dev/qv\.ac/([0-9.]+)/QV\.AC-x64-flatpak\.tar\.gz
