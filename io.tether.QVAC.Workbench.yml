@@ -65,6 +65,7 @@ modules:
         sha512: 240bb3c2c8d8df5fccf67a59893eb794906c7c4eaf3b5248c4e975bf6e3072ab02e89d9fa0365cdfc0de8406c1a93a95be3c33b0545b16d3cbca21f92479f697
         strip-components: 0
         x-checker-data:
-          type: "routing-url"
-          url: https://static.tether.dev/qv.ac/latest/QV.AC-x64-flatpak.tar.gz
-          pattern: https://static\.tether\.dev/qv\.ac/([0-9.]+)/QV\.AC-x64-flatpak\.tar\.gz
+          type: html
+          url: https://static.tether.dev/qv.ac/
+          version-pattern: href="\./((?:\d+\.)+\d+)/"
+          url-template: https://static.tether.dev/qv.ac/$version/QV.AC-x64-flatpak.tar.gz
