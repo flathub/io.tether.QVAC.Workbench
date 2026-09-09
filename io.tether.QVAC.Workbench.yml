@@ -61,8 +61,8 @@ modules:
       - cp -a main /app/main
     sources:
       - type: archive
-        url: https://static.tether.dev/qv.ac/0.16.0/QV.AC-x64-flatpak.tar.gz
-        sha512: caf67f3390e9ff7e0ec6b5e8dc7266ac5c95e4ee1207883115864d9a96389c32ee4529c22d44ffad9d2f9f4f2e45d74bb2ed00dc19d4d83b9a970bb2bbcb31d5
+        url: https://static.tether.dev/qv.ac/0.17.0/QV.AC-x64-flatpak.tar.gz
+        sha512: 517d25f91d036663e49ae068462f0c5fa324be128899caf9feba40afc291cdd1f6d58486f525093e0b013a5f5464cca14fb15f73e14e13d3c0dc34e34036e385
         strip-components: 0
         x-checker-data:
           type: html
