@@ -54,6 +54,12 @@ modules:
         if ! grep -q 'type="vcs-browser"' io.tether.QVAC.Workbench.metainfo.xml; then
           sed -i 's|</component>|  <url type="vcs-browser">https://github.com/flathub/io.tether.QVAC.Workbench</url>\n</component>|' io.tether.QVAC.Workbench.metainfo.xml
         fi
+      # Theme URLs in the tarball metainfo 404; point compose at PNGs in this repo.
+      - |
+        sed -i \
+          -e 's|https://qvac.tether.io/wp-content/themes/qvac-community-theme/assets/images/hero-workbench-1.png|https://raw.githubusercontent.com/mialso/io.tether.QVAC.Workbench/update-master-4e59a0e/screenshots/hero-workbench-1.png|' \
+          -e 's|https://qvac.tether.io/wp-content/themes/qvac-community-theme/assets/images/workbench-2-screen.png|https://raw.githubusercontent.com/mialso/io.tether.QVAC.Workbench/update-master-4e59a0e/screenshots/workbench-2-screen.png|' \
+          io.tether.QVAC.Workbench.metainfo.xml
       - install -Dm644 io.tether.QVAC.Workbench.metainfo.xml /app/share/metainfo/io.tether.QVAC.Workbench.metainfo.xml
       - install -Dm644 io.tether.QVAC.Workbench.png /app/share/icons/hicolor/512x512/apps/io.tether.QVAC.Workbench.png
       - install -Dm644 io.tether.QVAC.Workbench.desktop /app/share/applications/io.tether.QVAC.Workbench.desktop
@@ -61,8 +67,8 @@ modules:
       - cp -a main /app/main
     sources:
       - type: archive
-        url: https://static.tether.dev/qv.ac/0.16.0/QV.AC-x64-flatpak.tar.gz
-        sha512: caf67f3390e9ff7e0ec6b5e8dc7266ac5c95e4ee1207883115864d9a96389c32ee4529c22d44ffad9d2f9f4f2e45d74bb2ed00dc19d4d83b9a970bb2bbcb31d5
+        url: https://static.tether.dev/qv.ac/0.17.0/QV.AC-x64-flatpak.tar.gz
+        sha512: 517d25f91d036663e49ae068462f0c5fa324be128899caf9feba40afc291cdd1f6d58486f525093e0b013a5f5464cca14fb15f73e14e13d3c0dc34e34036e385
         strip-components: 0
         x-checker-data:
           type: html
