@@ -54,6 +54,12 @@ modules:
         if ! grep -q 'type="vcs-browser"' io.tether.QVAC.Workbench.metainfo.xml; then
           sed -i 's|</component>|  <url type="vcs-browser">https://github.com/flathub/io.tether.QVAC.Workbench</url>\n</component>|' io.tether.QVAC.Workbench.metainfo.xml
         fi
+      # Theme URLs in the tarball metainfo 404; point compose at PNGs in this repo.
+      - |
+        sed -i \
+          -e 's|https://qvac.tether.io/wp-content/themes/qvac-community-theme/assets/images/hero-workbench-1.png|https://raw.githubusercontent.com/mialso/io.tether.QVAC.Workbench/update-master-4e59a0e/screenshots/hero-workbench-1.png|' \
+          -e 's|https://qvac.tether.io/wp-content/themes/qvac-community-theme/assets/images/workbench-2-screen.png|https://raw.githubusercontent.com/mialso/io.tether.QVAC.Workbench/update-master-4e59a0e/screenshots/workbench-2-screen.png|' \
+          io.tether.QVAC.Workbench.metainfo.xml
       - install -Dm644 io.tether.QVAC.Workbench.metainfo.xml /app/share/metainfo/io.tether.QVAC.Workbench.metainfo.xml
       - install -Dm644 io.tether.QVAC.Workbench.png /app/share/icons/hicolor/512x512/apps/io.tether.QVAC.Workbench.png
       - install -Dm644 io.tether.QVAC.Workbench.desktop /app/share/applications/io.tether.QVAC.Workbench.desktop
