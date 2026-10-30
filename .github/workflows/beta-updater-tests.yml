@@ -6,7 +6,7 @@ on:
       - master
     paths:
       - ".github/beta-updater/**"
-      - ".github/workflows/beta-updater*.yml"
+      - ".github/workflows/*updater*.yml"
       - "io.tether.QVAC.Workbench.yml"
       - "flathub.json"
 

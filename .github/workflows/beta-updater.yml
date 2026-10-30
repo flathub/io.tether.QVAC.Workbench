@@ -1,13 +1,15 @@
 name: Beta updater
 
-# Runs the official flatpak-external-data-checker against the beta branch, as
-# Flathub's hosted run does for the default branch (it scans only that one).
-# It opens pull requests against beta for human review; nothing here merges.
-# See .github/beta-updater/README.md.
+# Runs the official flatpak-external-data-checker against the beta branch, as Flathub's
+# hosted run does for the default branch (it scans only that one). It opens pull requests
+# against beta. Beta is set up with "automerge-flathubbot-prs": true, so the checker itself
+# may merge an updater pull request it finds on a later run, once that pull request's commit
+# status is success and it is mergeable; nothing else here merges. See
+# .github/beta-updater/README.md, including the Flathub linter exception this needs.
 
 on:
   schedule:
-    - cron: "17 */4 * * *"
+    - cron: "17 * * * *"
   workflow_dispatch:
 
 permissions: {}
@@ -26,29 +28,29 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      # A named local branch: the checker bases its pull request on the current branch.
+      - name: Check out the trusted master commit (code and production recipe)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.sha }}
+          path: trusted
+          persist-credentials: false
+
+      # Data only: nothing in beta is executed. A named local branch, because the checker
+      # bases its pull request on the current branch.
       - name: Check out beta
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: beta
+          path: beta
           persist-credentials: false
 
-      # Fails loudly instead of passing as a no-op, so a beta that is not set up cannot look ready.
-      - name: Check that beta is configured for the official checker
-        run: |
-          ok=true
-          grep -qF 'beta-$version/flatpak/QV.AC-x64-flatpak.tar.gz' io.tether.QVAC.Workbench.yml || {
-            echo "::error::beta's io.tether.QVAC.Workbench.yml has no staging x-checker-data (a url-template using beta-\$version/flatpak/)"
-            ok=false
-          }
-          jq -e '."automerge-flathubbot-prs" == false' flathub.json > /dev/null 2>&1 || {
-            echo "::error::beta's flathub.json does not set \"automerge-flathubbot-prs\": false"
-            ok=false
-          }
-          if [ "$ok" != true ]; then
-            echo "Beta is not set up for the official checker, so nothing was checked. Merge the beta manifest pull request first: it carries the staging checker data and automerge false. Runs fail here until then." | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
+      # Inside the pinned checker image, so the runner needs nothing extra. It changes only the
+      # working tree, and only while beta has no staging checker data yet.
+      - name: Prepare beta for the official checker (first run only)
+        uses: docker://ghcr.io/flathub/flatpak-external-data-checker@sha256:640890eb1b01defde74e067504f359508cb56a8ec0bae3250d16944c33776582
+        with:
+          entrypoint: /bin/bash
+          args: trusted/.github/beta-updater/prepare-beta.sh trusted beta io.tether.QVAC.Workbench.yml
 
       - name: Run the official flatpak-external-data-checker
         uses: docker://ghcr.io/flathub/flatpak-external-data-checker@sha256:640890eb1b01defde74e067504f359508cb56a8ec0bae3250d16944c33776582
@@ -60,4 +62,4 @@ jobs:
           GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          args: --update --never-fork --filter-type archive io.tether.QVAC.Workbench.yml
+          args: --update --never-fork --filter-type archive beta/io.tether.QVAC.Workbench.yml
