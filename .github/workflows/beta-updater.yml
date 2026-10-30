@@ -1,22 +1,14 @@
 name: Beta updater
 
-# Proposes a pull request against `beta` when QVAC publishes a newer, verified
-# staging Flatpak. It never merges; a human reviews and merges.
-# Code comes from the trusted master commit; the beta checkout is data only.
+# Runs the official flatpak-external-data-checker against the beta branch, which
+# Flathub's hosted checker does not scan (it only checks the default branch).
+# It opens pull requests against beta for human review; nothing here merges.
 # See .github/beta-updater/README.md.
 
 on:
   schedule:
     - cron: "17 */4 * * *"
   workflow_dispatch:
-    inputs:
-      mode:
-        description: "pr opens the beta pull request; patch only uploads a reviewable patch"
-        type: choice
-        options:
-          - pr
-          - patch
-        default: pr
 
 permissions: {}
 
@@ -33,108 +25,45 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    env:
-      MANIFEST: io.tether.QVAC.Workbench.yml
-      MODE: ${{ inputs.mode || vars.BETA_UPDATER_MODE || 'pr' }}
     steps:
-      - name: Check mode
-        run: |
-          case "$MODE" in
-            pr|patch) ;;
-            *) echo "BETA_UPDATER_MODE must be 'pr' or 'patch', got '$MODE'" >&2; exit 1 ;;
-          esac
-
-      - name: Check out the trusted master commit (code)
+      - name: Check out the trusted master commit (scripts and production recipe)
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ github.sha }}
           path: trusted
           persist-credentials: false
 
-      - name: Check out beta (data only, never executed)
+      # Only a 404 means "nothing published yet"; any other failure fails the run.
+      - name: Wait for the first published beta archive
+        id: archive
+        run: bash trusted/.github/beta-updater/prepare-beta.sh ready https://static.tether.dev/qv.ac/beta/flatpak/QV.AC-x64-flatpak.tar.gz >> "$GITHUB_OUTPUT"
+
+      - name: Note that no beta archive is published yet
+        if: steps.archive.outputs.ready != 'true'
+        run: echo "No beta archive is published yet, so there is nothing to update." >> "$GITHUB_STEP_SUMMARY"
+
+      # A named local branch: the checker bases its pull request on the current branch.
+      - name: Check out beta
+        if: steps.archive.outputs.ready == 'true'
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: beta
           path: beta
           persist-credentials: false
 
-      # Only same-repository pull requests authored by github-actions[bot] count; see README.
-      - name: List versions that already have a trusted updater pull request
+      - name: Prepare beta for the checker (bootstrap once, never auto-merge)
+        if: steps.archive.outputs.ready == 'true'
+        run: bash trusted/.github/beta-updater/prepare-beta.sh bootstrap trusted beta io.tether.QVAC.Workbench.yml
+
+      - name: Run the official flatpak-external-data-checker
+        if: steps.archive.outputs.ready == 'true'
+        uses: docker://ghcr.io/flathub/flatpak-external-data-checker@sha256:640890eb1b01defde74e067504f359508cb56a8ec0bae3250d16944c33776582
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh api "repos/$GITHUB_REPOSITORY/pulls?state=all&base=beta&per_page=100" > "$RUNNER_TEMP/pulls.json"
-          python3 -I trusted/.github/beta-updater/update_beta.py proposals \
-            --pulls "$RUNNER_TEMP/pulls.json" --repo "$GITHUB_REPOSITORY" > "$RUNNER_TEMP/proposed.txt"
-
-      - name: Select and verify the newest staging publication
-        id: update
-        run: |
-          python3 -I trusted/.github/beta-updater/update_beta.py update \
-            --master "trusted/$MANIFEST" \
-            --beta-dir beta \
-            --proposed "$RUNNER_TEMP/proposed.txt" \
-            --pr-body "$RUNNER_TEMP/pr-body.md" \
-            --master-rev "$GITHUB_SHA" \
-            --github-output "$GITHUB_OUTPUT" \
-            --summary "$GITHUB_STEP_SUMMARY"
-
-      - name: Build reviewable patch
-        if: steps.update.outputs.changed == 'true'
-        run: |
-          set -euo pipefail
-          git -C beta diff --no-color --no-ext-diff --no-textconv -- "$MANIFEST" > "$RUNNER_TEMP/beta-update.patch"
-          test -s "$RUNNER_TEMP/beta-update.patch"
-
-      - name: Upload patch
-        if: steps.update.outputs.changed == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+          GIT_AUTHOR_NAME: Flatpak External Data Checker
+          GIT_COMMITTER_NAME: Flatpak External Data Checker
+          # This email makes "github-actions[bot]" the commit author.
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: beta-update-${{ steps.update.outputs.version }}
-          path: ${{ runner.temp }}/beta-update.patch
-          retention-days: 14
-          if-no-files-found: error
-
-      - name: Open the beta pull request
-        if: steps.update.outputs.changed == 'true' && env.MODE == 'pr'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BRANCH: ${{ steps.update.outputs.branch }}
-          VERSION: ${{ steps.update.outputs.version }}
-        run: |
-          set -euo pipefail
-          gh auth setup-git
-          git -C beta config user.name "github-actions[bot]"
-          git -C beta config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # Stages the manifest. Fails (no push) if the branch exists but is not exactly this
-          # verified update on the current beta head; prints "reuse" only for a crash retry.
-          action="$(python3 -I trusted/.github/beta-updater/update_beta.py plan-branch \
-            --beta-dir beta --manifest "$MANIFEST" --branch "$BRANCH")"
-          if [ "$action" = create ]; then
-            git -C beta switch -c "$BRANCH"
-            git -C beta commit -m "Update QV.AC beta to $VERSION" \
-              -m "Generated by .github/beta-updater from the verified staging publication."
-            git -C beta push origin "HEAD:refs/heads/$BRANCH"
-          else
-            echo "Branch $BRANCH already is exactly this verified update; reusing it."
-          fi
-          # The branch is verified now, so any same-repo pull request on this exact head into
-          # beta counts, whoever opened it and open or closed (a maintainer's PR, or their decline).
-          gh api "repos/$GITHUB_REPOSITORY/pulls?state=all&head=$GITHUB_REPOSITORY_OWNER:$BRANCH&per_page=100" > "$RUNNER_TEMP/branch-pulls.json"
-          python3 -I trusted/.github/beta-updater/update_beta.py proposals \
-            --pulls "$RUNNER_TEMP/branch-pulls.json" --repo "$GITHUB_REPOSITORY" --verified-head "$BRANCH" > "$RUNNER_TEMP/branch-proposed.txt"
-          if grep -qxF "$VERSION" "$RUNNER_TEMP/branch-proposed.txt"; then
-            echo "A pull request on $BRANCH already exists (open or closed); nothing to open." | tee -a "$GITHUB_STEP_SUMMARY"
-          else
-            url="$(gh pr create --repo "$GITHUB_REPOSITORY" --base beta --head "$BRANCH" \
-              --title "Update QV.AC beta to $VERSION" --body-file "$RUNNER_TEMP/pr-body.md")"
-            echo "Opened $url" | tee -a "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Note patch-only run
-        if: steps.update.outputs.changed == 'true' && env.MODE == 'patch'
-        env:
-          VERSION: ${{ steps.update.outputs.version }}
-        run: |
-          echo "Patch mode: no branch or pull request was created. Download the beta-update-$VERSION artifact and review it with git apply on the beta branch." >> "$GITHUB_STEP_SUMMARY"
+          args: --update --never-fork --filter-type archive beta/io.tether.QVAC.Workbench.yml
