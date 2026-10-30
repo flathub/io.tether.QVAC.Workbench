@@ -1,0 +1,45 @@
+name: Production updater
+
+# Manual stand-in for Flathub's hosted checker, for when that central bot is not running.
+# It runs the same official flatpak-external-data-checker on master, so the production manifest
+# and flathub.json are used exactly as they are: no change, and no automerge override. The
+# checker opens a pull request against master for human review. See
+# .github/beta-updater/README.md.
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: production-updater
+  cancel-in-progress: false
+
+jobs:
+  update:
+    # Never run a copy of this workflow from a fork or from any branch other than master.
+    if: github.repository == 'flathub/io.tether.QVAC.Workbench' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      # A named local branch, because the checker bases its pull request on the current branch.
+      - name: Check out master
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: master
+          persist-credentials: false
+
+      - name: Run the official flatpak-external-data-checker
+        uses: docker://ghcr.io/flathub/flatpak-external-data-checker@sha256:640890eb1b01defde74e067504f359508cb56a8ec0bae3250d16944c33776582
+        env:
+          GIT_AUTHOR_NAME: Flatpak External Data Checker
+          GIT_COMMITTER_NAME: Flatpak External Data Checker
+          # This email makes "github-actions[bot]" the commit author.
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: --update --never-fork --filter-type archive io.tether.QVAC.Workbench.yml
