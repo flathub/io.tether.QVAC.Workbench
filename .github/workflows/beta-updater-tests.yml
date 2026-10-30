@@ -1,0 +1,24 @@
+name: Beta updater tests
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - ".github/beta-updater/**"
+      - ".github/workflows/beta-updater*.yml"
+      - "io.tether.QVAC.Workbench.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Run offline updater tests
+        run: python3 -I -m unittest discover -s .github/beta-updater/tests -v
