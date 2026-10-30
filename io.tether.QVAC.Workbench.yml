@@ -1,8 +1,8 @@
 id: io.tether.QVAC.Workbench
-runtime: org.gnome.Platform
-runtime-version: '49'
-sdk: org.gnome.Sdk
-command: qvac_workbench
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+command: run.sh
 base: org.electronjs.Electron2.BaseApp
 base-version: '25.08'
 build-options:
@@ -13,24 +13,65 @@ finish-args:
   - --share=network
   - --socket=x11
   - --socket=pulseaudio
-  - --device=all
+  - --device=dri
   - --talk-name=org.kde.StatusNotifierWatcher
+  - --env=ELECTRON_TRASH=gio
+  - --env=GTK_USE_PORTAL=1
   - --env=XCURSOR_PATH=/run/host/user-share/icons:/run/host/share/icons
   - --talk-name=org.freedesktop.ScreenSaver
-  - --persist=.config/pear
+  - --persist=.qvac-workbench
   - --persist=.qvac
+
 modules:
-  - name: qvac_workbench-x64
+  - name: obsidian
     only-arches:
       - x86_64
     buildsystem: simple
     build-commands:
+      - ar x obsidian.deb
+      - tar xf data.tar.*
+      - cp -a opt/Obsidian /app/obsidian
+      - rm -f /app/obsidian/chrome-sandbox
+      - install -Dm755 obsidian-wrapper /app/bin/obsidian
+    sources:
+      - type: file
+        url: https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.7/obsidian_1.12.7_amd64.deb
+        sha256: 3644e3ef19bcd23db4d17f7c73311b5245429391a2a48b361da93375f59712b0
+        dest-filename: obsidian.deb
+      - type: script
+        dest-filename: obsidian-wrapper
+        commands:
+          - exec /app/obsidian/obsidian-cli "$@"
+
+  # --- QVAC Workbench (packaged Electron app + desktop integration) ---
+  # The archive source is extracted by flatpak-builder before build commands run.
+  - name: qvac-workbench
+    only-arches:
+      - x86_64
+    buildsystem: simple
+    build-commands:
+      - |
+        if ! grep -q 'type="vcs-browser"' io.tether.QVAC.Workbench.metainfo.xml; then
+          sed -i 's|</component>|  <url type="vcs-browser">https://github.com/flathub/io.tether.QVAC.Workbench</url>\n</component>|' io.tether.QVAC.Workbench.metainfo.xml
+        fi
+      # Theme URLs in the tarball metainfo 404; point compose at PNGs in this repo.
+      - |
+        sed -i \
+          -e 's|https://qvac.tether.io/wp-content/themes/qvac-community-theme/assets/images/hero-workbench-1.png|https://raw.githubusercontent.com/mialso/io.tether.QVAC.Workbench/update-master-4e59a0e/screenshots/hero-workbench-1.png|' \
+          -e 's|https://qvac.tether.io/wp-content/themes/qvac-community-theme/assets/images/workbench-2-screen.png|https://raw.githubusercontent.com/mialso/io.tether.QVAC.Workbench/update-master-4e59a0e/screenshots/workbench-2-screen.png|' \
+          io.tether.QVAC.Workbench.metainfo.xml
       - install -Dm644 io.tether.QVAC.Workbench.metainfo.xml /app/share/metainfo/io.tether.QVAC.Workbench.metainfo.xml
       - install -Dm644 io.tether.QVAC.Workbench.png /app/share/icons/hicolor/512x512/apps/io.tether.QVAC.Workbench.png
       - install -Dm644 io.tether.QVAC.Workbench.desktop /app/share/applications/io.tether.QVAC.Workbench.desktop
-      - install -Dm755 qvac_workbench $FLATPAK_DEST/bin/qvac_workbench
+      - install -Dm755 run.sh /app/bin/run.sh
+      - cp -a main /app/main
     sources:
       - type: archive
-        url: https://static.tether.dev/qvac/workbench/flatpak-assets-1.0.0.tar.gz
-        sha512: bce96c60c1c49124fc83fda9034466691e12c8afbf26cf6ce0e24b44e3581665bd7123a06b4f0cc7b32e34d0f959ac219cd48fe62b78a68c315c236da1eb5273
+        url: https://static.tether.dev/qv.ac/beta-0.21.0-rc.4.250/flatpak/QV.AC-x64-flatpak.tar.gz
+        sha512: 06b30faf9adec5186d76ceb93a489653c639d9594a02aba458e8ac61f99f9bbc5117a71fa4c2f4b0554c434e8a6bc2dc37f6a84ddcc4e355bd2d5ed5ebe3a7f6
         strip-components: 0
+        x-checker-data:
+          type: html
+          url: https://static.tether.dev/qv.ac/
+          version-pattern: href="\./beta-(\d+\.\d+\.\d+-rc\.\d+\.\d+)/"
+          url-template: https://static.tether.dev/qv.ac/beta-$version/flatpak/QV.AC-x64-flatpak.tar.gz
