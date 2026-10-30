@@ -9,7 +9,9 @@
 #
 # Beta without x-checker-data (today's obsolete recipe): the beta manifest becomes the
 # human-authored production manifest with only its checker's version-pattern and url-template
-# switched to staging discovery, and flathub.json gets "automerge-flathubbot-prs": true. The
+# switched to staging discovery, and flathub.json gets "automerge-flathubbot-prs": true unless
+# beta already sets it to an explicit true or false, which is kept. A flathub.json that is not a
+# JSON object, or whose setting is not a boolean, is refused before anything is changed. The
 # source url and sha512 stay production's real ones until the checker verifies a staged RC. All of
 # this is only an edit of the working tree: the checker commits it, on a new branch, together
 # with a real update and never alone. Beta that already has staging checker data: nothing is
@@ -60,15 +62,29 @@ BETA_PATTERN='href="\./beta-(\d+\.\d+\.\d+-rc\.\d+\.\d+)/"' \
 
 current="$flathub"
 [ -f "$current" ] || current="$trusted/flathub.json"
-jq --indent 2 '. + {"automerge-flathubbot-prs": true}' "$current" > "$flathub_tmp" ||
-  fail "$current is not a JSON object"
+jq -e 'type == "object" and ((has("automerge-flathubbot-prs") | not) or (.["automerge-flathubbot-prs"] | type == "boolean"))' \
+  "$current" > /dev/null 2>&1 ||
+  fail "$current must be a JSON object whose automerge-flathubbot-prs, if set, is true or false"
+# The checker reads this setting from beta's working tree, not from a pull request. An explicit
+# true or false already on beta is a human decision and is kept, even before the first update;
+# only a missing setting defaults to true.
+if [ "$current" = "$flathub" ] && jq -e 'has("automerge-flathubbot-prs")' "$flathub" > /dev/null; then
+  write_flathub=false
+else
+  write_flathub=true
+  jq --indent 2 '. + {"automerge-flathubbot-prs": true}' "$current" > "$flathub_tmp" ||
+    fail "$current is not valid JSON"
+fi
 
-chmod 644 "$manifest_tmp" "$flathub_tmp"
+chmod 644 "$manifest_tmp"
 mv "$manifest_tmp" "$target"
-mv "$flathub_tmp" "$flathub"
+if [ "$write_flathub" = true ]; then
+  chmod 644 "$flathub_tmp"
+  mv "$flathub_tmp" "$flathub"
+fi
 
 # The checker commits with `git commit -a`, which skips files git does not track yet.
 if [ -e "$beta/.git" ]; then
   git -c "safe.directory=$(cd "$beta" && pwd -P)" -C "$beta" add --intent-to-add -- "$name" flathub.json
 fi
-echo "beta prepared from $production: staging discovery, automerge-flathubbot-prs true" >&2
+echo "beta prepared from $production: staging discovery, automerge-flathubbot-prs $(jq -r '.["automerge-flathubbot-prs"]' "$flathub")" >&2

@@ -318,6 +318,35 @@ class HelperTests(BetaCase):
         expected = {**json.loads(text(self.trusted / "flathub.json")), "automerge-flathubbot-prs": True}
         self.assertEqual(json.loads(text(self.beta / "flathub.json")), expected)
 
+    def test_an_explicit_automerge_choice_on_beta_survives_the_first_preparation(self):
+        # The checker reads this setting from beta's working tree, so a human's true or false
+        # must win even while beta is still unconfigured; only a missing setting defaults to true.
+        for value in ("false", "true"):
+            with self.subTest(value):
+                explicit = f'{{"only-arches": ["x86_64"], "automerge-flathubbot-prs": {value}}}\n'
+                (self.beta / MANIFEST).write_text(obsolete_beta(), encoding="utf-8")
+                (self.beta / "flathub.json").write_text(explicit, encoding="utf-8")
+                self.prepare_ok()
+                self.assertIn("beta-$version/flatpak/", text(self.beta / MANIFEST), "the recipe is still seeded")
+                self.assertEqual(text(self.beta / "flathub.json"), explicit, "the explicit choice is kept as it is")
+
+    def test_an_invalid_flathub_json_is_refused_before_anything_is_changed(self):
+        cases = {
+            "not JSON": "not json",
+            "not an object": '["automerge-flathubbot-prs"]\n',
+            "string value": '{"automerge-flathubbot-prs": "true"}\n',
+            "null value": '{"automerge-flathubbot-prs": null}\n',
+            "number value": '{"automerge-flathubbot-prs": 1}\n',
+        }
+        for label, content in cases.items():
+            with self.subTest(label):
+                (self.beta / "flathub.json").write_text(content, encoding="utf-8")
+                before = tree_bytes(self.beta)
+                result = self.prepare()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("true or false", result.stderr)
+                self.assertEqual(tree_bytes(self.beta), before, "neither beta file is touched")
+
     def test_a_configured_beta_is_left_alone_including_a_humans_automerge_choice(self):
         self.prepare_ok()
         (self.beta / MANIFEST).write_text("# beta-only note\n" + text(self.beta / MANIFEST), encoding="utf-8")

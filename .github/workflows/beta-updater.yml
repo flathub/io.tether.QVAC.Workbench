@@ -2,7 +2,8 @@ name: Beta updater
 
 # Runs the official flatpak-external-data-checker against the beta branch, as Flathub's
 # hosted run does for the default branch (it scans only that one). It opens pull requests
-# against beta. Beta is set up with "automerge-flathubbot-prs": true, so the checker itself
+# against beta. Beta defaults to "automerge-flathubbot-prs": true unless its own flathub.json
+# sets it, and the checker reads that file from beta, not from a PR. So the checker itself
 # may merge an updater pull request it finds on a later run, once that pull request's commit
 # status is success and it is mergeable; nothing else here merges. See
 # .github/beta-updater/README.md, including the Flathub linter exception this needs.
