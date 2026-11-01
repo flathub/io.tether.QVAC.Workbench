@@ -9,12 +9,33 @@ on:
       - ".github/workflows/*updater*.yml"
       - "io.tether.QVAC.Workbench.yml"
       - "flathub.json"
+  # Temporary manual smoke test of the published Flatpak: see the smoke job below.
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "Install from the Flathub beta remote, or from a Flathub test build"
+        type: choice
+        options:
+          - beta
+          - test
+        default: beta
+      test_build_id:
+        description: "Flathub test build id (digits only); used when source is test"
+        type: string
+        required: false
+        default: ""
+      expected_version:
+        description: "Version the installed metainfo must report"
+        type: string
+        default: "0.21.0-rc.4.254"
 
 permissions:
   contents: read
 
 jobs:
   test:
+    # The regular tests run for pull requests only, not for a manual smoke dispatch.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -25,3 +46,39 @@ jobs:
           persist-credentials: false
       - name: Run the tests (the official checker image pinned by the updater, local fixtures only)
         run: python3 -I -m unittest discover -s .github/beta-updater/tests -v
+
+  # Real Flatpak CLI install and launch of QV.AC on a plain GitHub-hosted VM. No credentials, no
+  # paid or provider infrastructure, and no sandbox bypass. The inputs reach the script only as
+  # environment variables, which it validates strictly. There is no waiting for publication:
+  # run it once the build exists.
+  smoke:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    env:
+      SMOKE_SOURCE: ${{ inputs.source }}
+      SMOKE_TEST_BUILD_ID: ${{ inputs.test_build_id }}
+      SMOKE_EXPECTED_VERSION: ${{ inputs.expected_version }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install the tools through apt
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends flatpak dbus-x11 xvfb openbox xdotool scrot
+
+      - name: Install QV.AC with Flatpak and launch it
+        run: bash .github/beta-updater/smoke-flatpak.sh
+
+      - name: Upload the logs and screenshot
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: qvac-flatpak-smoke-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/smoke
+          retention-days: 7
+          if-no-files-found: warn
