@@ -9,13 +9,14 @@
 #
 # Beta without x-checker-data (today's obsolete recipe): the beta manifest becomes the
 # human-authored production manifest with only its checker's version-pattern and url-template
-# switched to staging discovery, and flathub.json gets "automerge-flathubbot-prs": true unless
-# beta already sets it to an explicit true or false, which is kept. A flathub.json that is not a
-# JSON object, or whose setting is not a boolean, is refused before anything is changed. The
-# source url and sha512 stay production's real ones until the checker verifies a staged RC. All of
-# this is only an edit of the working tree: the checker commits it, on a new branch, together
-# with a real update and never alone. Beta that already has staging checker data: nothing is
-# touched, so human edits to its recipe, comments and flathub.json survive.
+# switched to staging discovery, and flathub.json gets "automerge-flathubbot-prs": false (beta PRs
+# are reviewed and merged by hand) unless beta already sets it to an explicit true or false, which
+# is kept. A flathub.json that is not a JSON object, or whose setting is not a boolean, is refused
+# before anything is changed. The source url and sha512 stay production's real ones until the
+# checker verifies a staged RC. All of this is only an edit of the working tree: the checker
+# commits it, on a new branch, together with a real update and never alone. Beta that already has
+# staging checker data: nothing is touched, so human edits to its recipe, comments and
+# flathub.json survive.
 set -euo pipefail
 
 fail() {
@@ -67,12 +68,13 @@ jq -e 'type == "object" and ((has("automerge-flathubbot-prs") | not) or (.["auto
   fail "$current must be a JSON object whose automerge-flathubbot-prs, if set, is true or false"
 # The checker reads this setting from beta's working tree, not from a pull request. An explicit
 # true or false already on beta is a human decision and is kept, even before the first update;
-# only a missing setting defaults to true.
+# only a missing setting becomes false. When beta has no flathub.json, production's is only a
+# starting point: the setting is replaced by false whatever production's value is.
 if [ "$current" = "$flathub" ] && jq -e 'has("automerge-flathubbot-prs")' "$flathub" > /dev/null; then
   write_flathub=false
 else
   write_flathub=true
-  jq --indent 2 '. + {"automerge-flathubbot-prs": true}' "$current" > "$flathub_tmp" ||
+  jq --indent 2 '. + {"automerge-flathubbot-prs": false}' "$current" > "$flathub_tmp" ||
     fail "$current is not valid JSON"
 fi
 

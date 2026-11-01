@@ -6,7 +6,8 @@ same tool, the **official**
 pinned by image digest, so that `beta` is checked too and `master` can be checked by
 hand. The checker alone chooses versions, downloads and hashes archives, rewrites the
 source url and sha512, commits, and opens the pull requests. Nothing here selects a
-version, computes a hash or merges.
+version or computes a hash, and nothing but the checker can merge: it does so only if beta
+explicitly sets automerge to `true` (see Merging).
 
 ## Beta updater
 
@@ -20,17 +21,19 @@ as a named branch (the checker bases its PR on the current branch) and is only d
    `version-pattern` and `url-template` switched to staging discovery
    (`beta-X.Y.Z-rc.N.B/` in the root listing, archive at
    `beta-<version>/flatpak/QV.AC-x64-flatpak.tar.gz`), and beta's `flathub.json` gets
-   `"automerge-flathubbot-prs": true` unless beta already sets it to an explicit `true` or
-   `false`, which is kept as it is. A `flathub.json` that is not a JSON object, or whose
-   setting is not a boolean, stops the run before anything is changed. This is an edit of
-   the working tree. The source url and sha512 stay production's real ones, never invented,
-   until the checker verifies a staged RC. Beta that already has staging checker data is not
-   touched, so human edits to its recipe, comments and `flathub.json` survive; checker data
-   without the staging template stops the run for a human.
+   `"automerge-flathubbot-prs": false` (manual review and merge) unless beta already sets it
+   to an explicit `true` or `false`, which is kept as it is. A `flathub.json` that is not a
+   JSON object, or whose setting is not a boolean, stops the run before anything is changed.
+   This is an edit of the working tree. The source url and sha512 stay production's real
+   ones, never invented, until the checker verifies a staged RC. Beta that already has
+   staging checker data is not touched, so human edits to its recipe, comments and
+   `flathub.json` survive; checker data without the staging template stops the run for a
+   human.
 2. **Check** with `--update --never-fork --filter-type archive`. The checker picks the
    newest RC, downloads and hashes it, rewrites url and sha512, commits to
-   `update-beta-<hash>` and opens a `[beta]` PR. It looks up PRs for that branch, so an
-   open, merged or declined one is not duplicated.
+   `update-beta-<hash>` and opens a `[beta]` PR. The branch is named from the committed
+   content, and the checker looks up PRs for that branch, so an open, merged or declined PR
+   for the same content is not duplicated.
 
 **First beta.** No staged archive is published yet, so every run fails visibly because the
 listing has no `beta-*` directory to match: nothing is committed and no PR is opened, and
@@ -38,43 +41,59 @@ the prepared edit is never committed on its own. Once QVAC lists a real RC, the 
 opens one PR that carries everything: the production recipe, the staging checker data, the
 `flathub.json` setting and the real archive url and hash. No separate setup PR is needed.
 
+**When what the updater commits changes.** The branch name comes from the committed tree, so
+a change to what the preparation produces (for example the automerge default) gives the same
+update a different `update-beta-<hash>` branch, and the checker will not find a PR on the old
+one. Then:
+
+- publish the replacement on the branch the checker computes for the new content, rather
+  than pushing the new content to an old hash-named PR head. While the previous updater is
+  still on `master`, it matches that old branch under its old settings;
+- close the superseded PR only after the replacement exists;
+- merge the trusted updater change on `master` before the beta recipe PR, so the updater
+  that runs next is the one that computes the replacement's branch and reuses it.
+
 ## Production updater
 
 `.github/workflows/production-updater.yml` is manual only, for when Flathub's central bot
 is not running. It checks out `master` as a named branch and runs the same checker with
-the same arguments, so the PR is based on `master` and the branch is `update-master-<hash>`,
-like the hosted checker's. The production manifest and `flathub.json` are used exactly as
-they are: no preparation, no config edit, no automerge override.
+`--update --never-fork --filter-type archive`, so the PR is based on `master` and the branch
+is `update-master-<hash>`, like the hosted checker's. The production manifest and
+`flathub.json` are used exactly as they are: no preparation, no config edit, no automerge
+override. The current `flathub.json` omits `automerge-flathubbot-prs`, so production update
+PRs are reviewed and merged by hand.
 
-## Automerge on beta, and the linter
+## Merging: manual by default
 
-With `automerge-flathubbot-prs: true` the checker may merge a beta PR, but only precisely
-like this: opening a PR never merges it. On a **later** hourly or manual run that finds the
-same PR still open (by its `update-beta-<hash>` branch), the checker merges it, with a
-rebase and deleting its branch, if the PR head commit's combined **commit status** is
-`success` and the PR is mergeable. Commit statuses are what Flathub's build bot posts;
-Actions check runs do not count, and a commit without statuses never counts.
-
-Flathub's linter (`flatpak-builder-lint`, `flathub-json-automerge-enabled`) reports an
-error whenever `automerge-flathubbot-prs` is `true`, and QVAC has no exception. **A
-Flathub maintainer must grant one before beta builds can pass and anything can merge
-automatically.** Until then the PRs simply stay open for a human. This setup does not
-bypass, hide or disable that check.
+Beta PRs are reviewed and merged by hand. When beta's `flathub.json` does not set
+`automerge-flathubbot-prs` (the live beta has none), the preparation sets it to `false`, so
+the checker never merges an updater PR on beta.
 
 **Which setting applies.** The checker reads `automerge-flathubbot-prs` from the
 `flathub.json` in the beta checkout it runs on, that is the base branch `beta`, not from a
 PR. Editing only an open PR's `flathub.json` therefore does **not** control whether that PR
-is merged: the next run still merges it if beta's setting is `true` and its status is
-`success`. The preparation defaults a missing setting to `true` (the live beta has none) and
-keeps an explicit `true` or `false` already on beta, even before the first update. To opt
-out, get `"automerge-flathubbot-prs": false` onto `beta` itself (a direct commit or a merged
-PR) before the next run; every later run keeps it. To stop a PR that already exists from
-being merged automatically, do that first, or close the PR (a closed updater PR is not
-reopened).
+is merged. The preparation keeps an explicit `true` or `false` already on beta, even before
+the first update, and only a missing setting becomes `false`. When beta has no
+`flathub.json` at all, production's is only a starting point: its automerge value, whatever
+it is, is replaced by `false`.
 
-Merging also needs what the repository provides outside this code: the built-in
-`GITHUB_TOKEN` (no other token is used), no branch protection that blocks it, and Flathub's
-builds running.
+**Turning automerge on later.** Get `"automerge-flathubbot-prs": true` onto `beta` itself (a
+direct commit or a merged PR); every later run keeps it. The checker may then merge a beta
+PR, but only precisely like this: opening a PR never merges it. On a **later** hourly or
+manual run that finds the same PR still open (by its `update-beta-<hash>` branch), it merges
+it, with a rebase and deleting its branch, if the PR head commit's combined **commit status**
+is `success` and the PR is mergeable. Commit statuses are what Flathub's build bot posts;
+Actions check runs do not count, and a commit without statuses never counts. Merging also
+needs what the repository provides outside this code: the built-in `GITHUB_TOKEN` (no other
+token is used), no branch protection that blocks it, and Flathub's builds running.
+
+**This needs Flathub's exception.** Flathub's linter (`flatpak-builder-lint`,
+`flathub-json-automerge-enabled`) reports an error whenever `automerge-flathubbot-prs` is
+`true`, and QVAC has no exception, so enabling it requires an exception from Flathub first.
+Until one exists, builds of a beta with the flag on do not pass and nothing merges. This
+setup does not bypass, hide or disable that check. To go back to manual merging, set `false`
+on `beta`; to stop one PR that already exists, do that first, or close the PR (a closed
+updater PR is not reopened).
 
 ## Limits
 
