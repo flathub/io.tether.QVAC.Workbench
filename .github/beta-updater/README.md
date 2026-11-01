@@ -6,7 +6,8 @@ same tool, the **official**
 pinned by image digest, so that `beta` is checked too and `master` can be checked by
 hand. The checker alone chooses versions, downloads and hashes archives, rewrites the
 source url and sha512, commits, and opens the pull requests. Nothing here selects a
-version, computes a hash or merges.
+version or computes a hash, and nothing but the checker can merge: it does so only if beta
+explicitly sets automerge to `true` (see Merging).
 
 ## Beta updater
 
@@ -30,14 +31,27 @@ as a named branch (the checker bases its PR on the current branch) and is only d
    human.
 2. **Check** with `--update --never-fork --filter-type archive`. The checker picks the
    newest RC, downloads and hashes it, rewrites url and sha512, commits to
-   `update-beta-<hash>` and opens a `[beta]` PR. It looks up PRs for that branch, so an
-   open, merged or declined one is not duplicated.
+   `update-beta-<hash>` and opens a `[beta]` PR. The branch is named from the committed
+   content, and the checker looks up PRs for that branch, so an open, merged or declined PR
+   for the same content is not duplicated.
 
 **First beta.** No staged archive is published yet, so every run fails visibly because the
 listing has no `beta-*` directory to match: nothing is committed and no PR is opened, and
 the prepared edit is never committed on its own. Once QVAC lists a real RC, the first run
 opens one PR that carries everything: the production recipe, the staging checker data, the
 `flathub.json` setting and the real archive url and hash. No separate setup PR is needed.
+
+**When what the updater commits changes.** The branch name comes from the committed tree, so
+a change to what the preparation produces (for example the automerge default) gives the same
+update a different `update-beta-<hash>` branch, and the checker will not find a PR on the old
+one. Then:
+
+- publish the replacement on the branch the checker computes for the new content, rather
+  than pushing the new content to an old hash-named PR head. While the previous updater is
+  still on `master`, it matches that old branch under its old settings;
+- close the superseded PR only after the replacement exists;
+- merge the trusted updater change on `master` before the beta recipe PR, so the updater
+  that runs next is the one that computes the replacement's branch and reuses it.
 
 ## Production updater
 
