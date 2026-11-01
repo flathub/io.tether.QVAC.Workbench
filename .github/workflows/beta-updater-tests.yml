@@ -69,9 +69,12 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends flatpak dbus-x11 xvfb openbox xdotool scrot
+          sudo apt-get install --yes --no-install-recommends flatpak dbus-x11 xvfb openbox xdotool scrot x11-utils
 
+      # Install is capped at 15 minutes and the launch at 5 inside the script; this step bound
+      # covers both, so the upload step below always has time to run within the job limit.
       - name: Install QV.AC with Flatpak and launch it
+        timeout-minutes: 21
         run: bash .github/beta-updater/smoke-flatpak.sh
 
       - name: Upload the logs and screenshot

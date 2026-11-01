@@ -10,15 +10,24 @@
 #   SMOKE_TEST_BUILD_ID     digits only; required when SMOKE_SOURCE is test
 #   SMOKE_EXPECTED_VERSION  version the installed metainfo must report, e.g. 0.21.0-rc.4.254
 #
-# Evidence (logs, installed metainfo, screenshot) goes to $RUNNER_TEMP/smoke. No credentials are
-# used and the environment is never printed. Nothing weakens the Flatpak or Electron sandbox: the
-# app is started with a plain `flatpak run`.
+# The launch passes only for a visible window of the app itself: its WM_CLASS must be the
+# StartupWMClass of the installed desktop file. An error dialog titled "Error", a fatal
+# main-process error in the app log, an exit, or a window that is gone after the stabilization
+# period each fail the run. Nothing ever waits on a live app: failures report diagnostics (window
+# tree, WM_CLASS and title of every visible window, a screenshot, the log tail) and the bounded
+# cleanup stops it. Process ids are not used to find the window: they are namespaced inside the
+# Flatpak sandbox.
+#
+# Evidence (logs, installed metainfo, window diagnostics, screenshot) goes to $RUNNER_TEMP/smoke.
+# No credentials are used and the environment is never printed. Nothing weakens the Flatpak or
+# Electron sandbox: the app is started with a plain `flatpak run`.
 set -euo pipefail
 
 APP=io.tether.QVAC.Workbench
 OUT="${RUNNER_TEMP:-/tmp}/smoke"
-LAUNCH_SECONDS=120
-STABLE_SECONDS=5
+LAUNCH_SECONDS=120          # how long the app may take to show its window
+STABLE_SECONDS=5            # the window must still be there this long afterwards
+LAUNCH_BACKSTOP_SECONDS=300 # outer bound for the whole launch phase, diagnostics and cleanup included
 
 die() {
   echo "error: $*" >&2
@@ -73,9 +82,22 @@ record_evidence() {
   echo "ref=$ref branch=$branch commit=$commit origin=$origin version=$version type=$release_type"
 }
 
-# Runs inside dbus-run-session, so the app and its portals get a private session bus.
+# The window class the app declares for itself, read from the installed desktop file. Exactly one
+# StartupWMClass made of plain class-name characters is required, so it is safe to use in a regex
+# once its dots are escaped.
+installed_wm_class() {
+  local desktop value plain_re='^[A-Za-z0-9._-]+$'
+  desktop="$(flatpak info --user --show-location "$APP")/files/share/applications/$APP.desktop"
+  [ -f "$desktop" ] || die "the installed package has no desktop file at files/share/applications"
+  value="$(sed -n 's/^StartupWMClass=//p' "$desktop" | tr -d '\r')"
+  [[ "$value" =~ $plain_re ]] || die "the desktop file needs exactly one plain StartupWMClass"
+  printf '%s' "$value"
+}
+
+# Everything below that touches the display is bounded with `timeout`, and nothing waits on the
+# app, so a hung app or display cannot stall the failure path.
 cleanup() {
-  flatpak kill "$APP" > /dev/null 2>&1 || true
+  timeout 15 flatpak kill "$APP" > /dev/null 2>&1 || true
   local pid
   for pid in "${app_pid:-}" "${openbox_pid:-}" "${xvfb_pid:-}"; do
     [ -z "$pid" ] || kill "$pid" 2> /dev/null || true
@@ -86,12 +108,13 @@ cleanup() {
   done
 }
 
-# A visible top-level window of a plausible size, so tiny helper windows do not count.
+# Visible windows of the app itself (anchored, escaped WM_CLASS) of a plausible size, so tiny
+# helper windows do not count.
 find_window() {
   local ids id geometry width height
-  mapfile -t ids < <(xdotool search --onlyvisible --name '.' 2> /dev/null || true)
+  mapfile -t ids < <(timeout 10 xdotool search --onlyvisible --class "$class_re" 2> /dev/null || true)
   for id in "${ids[@]}"; do
-    geometry="$(xdotool getwindowgeometry --shell "$id" 2> /dev/null)" || continue
+    geometry="$(timeout 10 xdotool getwindowgeometry --shell "$id" 2> /dev/null)" || continue
     width="$(printf '%s\n' "$geometry" | sed -n 's/^WIDTH=//p')"
     height="$(printf '%s\n' "$geometry" | sed -n 's/^HEIGHT=//p')"
     if [ "${width:-0}" -ge 300 ] && [ "${height:-0}" -ge 200 ]; then
@@ -102,17 +125,64 @@ find_window() {
   return 1
 }
 
-app_failed() {
-  local status=0
-  wait "$app_pid" || status=$?
-  echo "error: $1 (exit status $status); last log lines:" >&2
+# The window tree and the WM_CLASS, title and geometry of every visible named window, so a class
+# mismatch can be told apart from a real startup error. $1 is success or failure.
+capture_windows() {
+  local ids id
+  {
+    echo "expected WM_CLASS: ${wm_class:-unknown}"
+    echo "--- xwininfo -root -tree"
+    timeout 10 xwininfo -root -tree || true
+    mapfile -t ids < <(timeout 10 xdotool search --onlyvisible --name '.' 2> /dev/null || true)
+    for id in "${ids[@]}"; do
+      echo "--- window $id"
+      timeout 10 xprop -id "$id" WM_CLASS WM_NAME _NET_WM_NAME || true
+      timeout 10 xdotool getwindowgeometry "$id" || true
+    done
+  } > "$OUT/windows-$1.txt" 2>&1
+  if [ "$1" = failure ]; then
+    timeout 10 scrot "$OUT/failure-screenshot.png" > /dev/null 2>&1 || true
+  fi
+}
+
+# Reports and exits; it never waits on a live app, the EXIT trap's cleanup stops it.
+fail_launch() {
+  echo "error: $1" >&2
+  capture_windows failure
+  if kill -0 "$app_pid" 2> /dev/null; then
+    echo "the app is still running; the cleanup stops it" >&2
+  else
+    local status=0
+    wait "$app_pid" || status=$?
+    echo "the app exited with status $status" >&2
+  fi
+  echo "last app log lines:" >&2
   tail -n 40 "$OUT/app.log" >&2 || true
   exit 1
+}
+
+# $1 says when, for the message: the app must be alive, its log free of fatal main-process
+# errors, and no error dialog may be showing (Electron's uncaught-exception box is titled Error
+# and keeps the process alive).
+check_health() {
+  kill -0 "$app_pid" 2> /dev/null || fail_launch "the app exited $1"
+  if grep -qF -e 'A JavaScript error occurred in the main process' \
+    -e 'Uncaught Exception' -e 'App threw an error during load' "$OUT/app.log" 2> /dev/null; then
+    fail_launch "the app log reports a fatal main-process error ($1)"
+  fi
+  if timeout 10 xdotool search --onlyvisible --name '^Error$' > /dev/null 2>&1; then
+    fail_launch "an error dialog is showing ($1)"
+  fi
 }
 
 launch() {
   export DISPLAY=:99
   trap cleanup EXIT
+  wm_class="$(installed_wm_class)"
+  printf '%s\n' "$wm_class" > "$OUT/startup-wm-class.txt"
+  # The class is plain characters only, so the dot is the one regex metacharacter to escape.
+  class_re="^$(printf '%s' "$wm_class" | sed 's/\./\\./g')\$"
+
   Xvfb "$DISPLAY" -screen 0 1280x800x24 -nolisten tcp > "$OUT/xvfb.log" 2>&1 &
   xvfb_pid=$!
   for _ in $(seq 1 20); do
@@ -126,27 +196,32 @@ launch() {
   flatpak run --user "$APP" > "$OUT/app.log" 2>&1 &
   app_pid=$!
 
-  local window=""
-  while [ "$SECONDS" -lt "$LAUNCH_SECONDS" ]; do
-    kill -0 "$app_pid" 2> /dev/null || app_failed "the app exited before showing a window"
+  local window="" deadline=$((SECONDS + LAUNCH_SECONDS))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    check_health "before showing its window"
     window="$(find_window || true)"
     [ -z "$window" ] || break
     sleep 2
   done
-  [ -n "$window" ] || app_failed "no app window within ${LAUNCH_SECONDS}s"
+  [ -n "$window" ] || fail_launch "no visible window of class $wm_class within ${LAUNCH_SECONDS}s"
 
   sleep "$STABLE_SECONDS"
-  kill -0 "$app_pid" 2> /dev/null || app_failed "the app crashed right after showing its window"
-  xdotool getwindowname "$window" | tr -cd '[:print:]' > "$OUT/window-name.txt"
-  scrot "$OUT/screenshot.png"
-  [ -s "$OUT/screenshot.png" ] || die "no screenshot was captured"
-  echo "window shown and app still running after ${STABLE_SECONDS}s"
+  check_health "during the ${STABLE_SECONDS}s stabilization"
+  window="$(find_window || true)"
+  [ -n "$window" ] || fail_launch "the app window of class $wm_class is gone after ${STABLE_SECONDS}s (closed, hidden or replaced)"
+
+  timeout 10 xdotool getwindowname "$window" 2> /dev/null | tr -cd '[:print:]' > "$OUT/window-name.txt" || true
+  capture_windows success
+  timeout 10 scrot "$OUT/screenshot.png" || true
+  [ -s "$OUT/screenshot.png" ] || fail_launch "no screenshot was captured"
+  echo "app window of class $wm_class shown and still there after ${STABLE_SECONDS}s"
 }
 
 summary() {
-  local window_name launched=$1 source_text="$SMOKE_SOURCE"
+  local window_name wm launched=$1 source_text="$SMOKE_SOURCE"
   [ "$SMOKE_SOURCE" != test ] || source_text="test (build $SMOKE_TEST_BUILD_ID)"
   window_name="$(tr -d '|' < "$OUT/window-name.txt" 2> /dev/null || true)"
+  wm="$(tr -d '|' < "$OUT/startup-wm-class.txt" 2> /dev/null || true)"
   {
     echo "### QV.AC Flatpak smoke test"
     echo
@@ -159,6 +234,7 @@ summary() {
     echo "| Origin | ${origin} |"
     echo "| Installed version | ${version} (expected ${SMOKE_EXPECTED_VERSION}, match: ${version_ok}) |"
     echo "| Release type | ${release_type} |"
+    echo "| Startup WM class | ${wm:-unknown} |"
     echo "| Window | ${window_name:-none} |"
     echo "| Launch | ${launched} |"
   } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
@@ -176,9 +252,19 @@ main() {
   install_app 2>&1 | tee "$OUT/install.log"
   record_evidence
 
+  # The launch phase has its own deadlines; this outer bound only guarantees that it ends, and
+  # `timeout` stops its whole process group.
   launch_status=0
-  dbus-run-session -- bash "${BASH_SOURCE[0]}" launch || launch_status=$?
-  if [ "$launch_status" -eq 0 ]; then summary passed; else summary "failed (status $launch_status)"; fi
+  timeout --kill-after=15 "$LAUNCH_BACKSTOP_SECONDS" \
+    dbus-run-session -- bash "${BASH_SOURCE[0]}" launch || launch_status=$?
+  timeout 15 flatpak kill "$APP" > /dev/null 2>&1 || true
+  if [ "$launch_status" -eq 0 ]; then
+    summary passed
+  elif [ "$launch_status" -eq 124 ] || [ "$launch_status" -eq 137 ]; then
+    summary "failed (status $launch_status: the ${LAUNCH_BACKSTOP_SECONDS}s backstop stopped it)"
+  else
+    summary "failed (status $launch_status)"
+  fi
   [ "$version_ok" = true ] && [ "$launch_status" -eq 0 ] || exit 1
 }
 
