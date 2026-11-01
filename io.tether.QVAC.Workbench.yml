@@ -61,6 +61,10 @@ modules:
           -e 's|https://qvac.tether.io/wp-content/themes/qvac-community-theme/assets/images/hero-workbench-1.png|https://raw.githubusercontent.com/mialso/io.tether.QVAC.Workbench/update-master-4e59a0e/screenshots/hero-workbench-1.png|' \
           -e 's|https://qvac.tether.io/wp-content/themes/qvac-community-theme/assets/images/workbench-2-screen.png|https://raw.githubusercontent.com/mialso/io.tether.QVAC.Workbench/update-master-4e59a0e/screenshots/workbench-2-screen.png|' \
           io.tether.QVAC.Workbench.metainfo.xml
+      # Staging archives mark their release type="beta", which AppStream rejects (it allows
+      # stable and development). Normalize it; version, date and other releases stay as they are.
+      - |
+        sed -i '/<release[[:space:]]/ s/type="beta"/type="development"/' io.tether.QVAC.Workbench.metainfo.xml
       - install -Dm644 io.tether.QVAC.Workbench.metainfo.xml /app/share/metainfo/io.tether.QVAC.Workbench.metainfo.xml
       - install -Dm644 io.tether.QVAC.Workbench.png /app/share/icons/hicolor/512x512/apps/io.tether.QVAC.Workbench.png
       - install -Dm644 io.tether.QVAC.Workbench.desktop /app/share/applications/io.tether.QVAC.Workbench.desktop
