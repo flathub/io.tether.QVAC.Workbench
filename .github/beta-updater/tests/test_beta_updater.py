@@ -307,20 +307,35 @@ class HelperTests(BetaCase):
             [(a, b) for a, b in zip(old, new) if a != b],
             [(PRODUCTION_PATTERN, BETA_PATTERN), (PRODUCTION_TEMPLATE, BETA_TEMPLATE)],
         )
+        # A setting that beta lacks defaults to manual merging.
         self.assertEqual(
             json.loads(text(self.beta / "flathub.json")),
-            {"only-arches": ["x86_64"], "automerge-flathubbot-prs": True},
+            {"only-arches": ["x86_64"], "automerge-flathubbot-prs": False},
         )
 
-    def test_a_missing_flathub_json_is_seeded_from_production_with_automerge_true(self):
+    def test_a_missing_flathub_json_is_seeded_from_production_with_automerge_false(self):
         (self.beta / "flathub.json").unlink()
         self.prepare_ok()
-        expected = {**json.loads(text(self.trusted / "flathub.json")), "automerge-flathubbot-prs": True}
+        expected = {**json.loads(text(self.trusted / "flathub.json")), "automerge-flathubbot-prs": False}
         self.assertEqual(json.loads(text(self.beta / "flathub.json")), expected)
+
+    def test_productions_automerge_value_is_never_inherited_by_a_beta_without_flathub_json(self):
+        production = self.tmp / "production-with-automerge"
+        shutil.copytree(self.trusted, production)
+        (production / "flathub.json").write_text(
+            '{"only-arches": ["x86_64"], "automerge-flathubbot-prs": true}\n', encoding="utf-8"
+        )
+        (self.beta / "flathub.json").unlink()
+        result = self.prepare(trusted="production-with-automerge")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            json.loads(text(self.beta / "flathub.json")),
+            {"only-arches": ["x86_64"], "automerge-flathubbot-prs": False},
+        )
 
     def test_an_explicit_automerge_choice_on_beta_survives_the_first_preparation(self):
         # The checker reads this setting from beta's working tree, so a human's true or false
-        # must win even while beta is still unconfigured; only a missing setting defaults to true.
+        # must win even while beta is still unconfigured; only a missing setting becomes false.
         for value in ("false", "true"):
             with self.subTest(value):
                 explicit = f'{{"only-arches": ["x86_64"], "automerge-flathubbot-prs": {value}}}\n'
@@ -350,12 +365,13 @@ class HelperTests(BetaCase):
     def test_a_configured_beta_is_left_alone_including_a_humans_automerge_choice(self):
         self.prepare_ok()
         (self.beta / MANIFEST).write_text("# beta-only note\n" + text(self.beta / MANIFEST), encoding="utf-8")
-        (self.beta / "flathub.json").write_text(
-            '{"only-arches": ["x86_64"], "automerge-flathubbot-prs": false}\n', encoding="utf-8"
-        )
-        settled = tree_bytes(self.beta)
-        self.prepare_ok()
-        self.assertEqual(tree_bytes(self.beta), settled)
+        for value in ("false", "true"):
+            with self.subTest(value):
+                explicit = f'{{"only-arches": ["x86_64"], "automerge-flathubbot-prs": {value}}}\n'
+                (self.beta / "flathub.json").write_text(explicit, encoding="utf-8")
+                settled = tree_bytes(self.beta)
+                self.prepare_ok()
+                self.assertEqual(tree_bytes(self.beta), settled)
 
     def test_checker_data_that_is_not_staging_is_refused_not_overwritten(self):
         (self.beta / MANIFEST).write_text(text(self.trusted / MANIFEST), encoding="utf-8")  # production discovery
@@ -396,7 +412,8 @@ class OfficialCheckerTests(BetaCase):
         edited = "# beta-only note\n" + merged.replace("  - --persist=.qvac\n", "  - --persist=.qvac\n  - --filesystem=xdg-download\n")
         self.assertIn("--filesystem=xdg-download", edited)
         (self.beta / MANIFEST).write_text(edited, encoding="utf-8")
-        flathub = '{"only-arches": ["x86_64"], "automerge-flathubbot-prs": false}\n'
+        # A human opting in on beta later (this needs Flathub's exception) is kept, not reset to false.
+        flathub = '{"only-arches": ["x86_64"], "automerge-flathubbot-prs": true}\n'
         (self.beta / "flathub.json").write_text(flathub, encoding="utf-8")
 
         self.prepare_ok()
@@ -414,7 +431,7 @@ class OfficialCheckerTests(BetaCase):
         self.assertIn("--filesystem=xdg-download", updated)
         self.assertEqual(text(self.beta / "flathub.json"), flathub)
 
-    def test_the_first_update_commit_carries_the_beta_packaging_and_automerge_true(self):
+    def test_the_first_update_commit_carries_the_beta_packaging_and_manual_merging(self):
         publish(self.site, beta=("0.21.0-rc.10.5",))
         base = self.git_repo(self.beta, "beta")
         self.prepare_ok()
@@ -433,7 +450,7 @@ class OfficialCheckerTests(BetaCase):
         self.assertEqual(sorted(git(self.beta, "diff", "--name-only", f"{base}..{branch}").split()), ["flathub.json", MANIFEST])
         self.assertEqual(
             json.loads(git(self.beta, "show", f"{branch}:flathub.json")),
-            {"only-arches": ["x86_64"], "automerge-flathubbot-prs": True},
+            {"only-arches": ["x86_64"], "automerge-flathubbot-prs": False},
         )
         committed = self.parse_yaml(committed=git(self.beta, "show", f"{branch}:{MANIFEST}"))["committed"]
         source = qvac_source(committed)
@@ -452,7 +469,7 @@ class OfficialCheckerTests(BetaCase):
         self.assertEqual(sorted(git(self.beta, "diff", "--name-only", f"{base}..{branch}").split()), ["flathub.json", MANIFEST])
         self.assertEqual(
             json.loads(git(self.beta, "show", f"{branch}:flathub.json")),
-            {"only-arches": ["x86_64"], "automerge-flathubbot-prs": True},
+            {"only-arches": ["x86_64"], "automerge-flathubbot-prs": False},
         )
 
     def test_no_listed_rc_fails_visibly_and_the_seed_is_never_committed(self):
