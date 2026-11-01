@@ -10,8 +10,10 @@
 #   SMOKE_TEST_BUILD_ID     digits only; required when SMOKE_SOURCE is test
 #   SMOKE_EXPECTED_VERSION  version the installed metainfo must report, e.g. 0.21.0-rc.4.254
 #
-# The launch passes only for a visible window of the app itself: its WM_CLASS must be the
-# StartupWMClass of the installed desktop file. An error dialog titled "Error", a fatal
+# The launch passes only for a visible window of the app itself: its WM_CLASS class must be the
+# Flatpak application ID, which the main window carries. The desktop file's StartupWMClass is not
+# used for this: for staging builds it names a separate 10x10 helper window. It is recorded for
+# diagnosis only. An error dialog titled "Error", a fatal
 # main-process error in the app log, an exit, or a window that is gone after the stabilization
 # period each fail the run. Nothing ever waits on a live app: failures report diagnostics (window
 # tree, WM_CLASS and title of every visible window, a screenshot, the log tail) and the bounded
@@ -82,16 +84,19 @@ record_evidence() {
   echo "ref=$ref branch=$branch commit=$commit origin=$origin version=$version type=$release_type"
 }
 
-# The window class the app declares for itself, read from the installed desktop file. Exactly one
-# StartupWMClass made of plain class-name characters is required, so it is safe to use in a regex
-# once its dots are escaped.
-installed_wm_class() {
+# The StartupWMClass the installed desktop file declares, for diagnosis only: it never decides
+# whether the app passed, so a missing or odd value is reported as unavailable, not as a failure.
+declared_wm_class() {
   local desktop value plain_re='^[A-Za-z0-9._-]+$'
   desktop="$(flatpak info --user --show-location "$APP")/files/share/applications/$APP.desktop"
-  [ -f "$desktop" ] || die "the installed package has no desktop file at files/share/applications"
-  value="$(sed -n 's/^StartupWMClass=//p' "$desktop" | tr -d '\r')"
-  [[ "$value" =~ $plain_re ]] || die "the desktop file needs exactly one plain StartupWMClass"
-  printf '%s' "$value"
+  if [ -f "$desktop" ]; then
+    value="$(sed -n 's/^StartupWMClass=//p' "$desktop" | tr -d '\r')"
+    if [[ "$value" =~ $plain_re ]]; then
+      printf '%s' "$value"
+      return 0
+    fi
+  fi
+  printf '%s' unavailable
 }
 
 # Everything below that touches the display is bounded with `timeout`, and nothing waits on the
@@ -131,6 +136,7 @@ capture_windows() {
   local ids id
   {
     echo "expected WM_CLASS: ${wm_class:-unknown}"
+    echo "desktop file StartupWMClass (diagnostic only): ${declared_class:-unknown}"
     echo "--- xwininfo -root -tree"
     timeout 10 xwininfo -root -tree || true
     mapfile -t ids < <(timeout 10 xdotool search --onlyvisible --name '.' 2> /dev/null || true)
@@ -178,9 +184,11 @@ check_health() {
 launch() {
   export DISPLAY=:99
   trap cleanup EXIT
-  wm_class="$(installed_wm_class)"
-  printf '%s\n' "$wm_class" > "$OUT/startup-wm-class.txt"
-  # The class is plain characters only, so the dot is the one regex metacharacter to escape.
+  declared_class="$(declared_wm_class)"
+  printf '%s\n' "$declared_class" > "$OUT/startup-wm-class.txt"
+  # The window identity is the application ID itself. It is plain characters, so the dot is the
+  # one regex metacharacter to escape; the pattern is anchored at both ends.
+  wm_class="$APP"
   class_re="^$(printf '%s' "$wm_class" | sed 's/\./\\./g')\$"
 
   Xvfb "$DISPLAY" -screen 0 1280x800x24 -nolisten tcp > "$OUT/xvfb.log" 2>&1 &
@@ -218,10 +226,11 @@ launch() {
 }
 
 summary() {
-  local window_name wm launched=$1 source_text="$SMOKE_SOURCE"
+  local window_name="" declared="" launched=$1 source_text="$SMOKE_SOURCE"
   [ "$SMOKE_SOURCE" != test ] || source_text="test (build $SMOKE_TEST_BUILD_ID)"
-  window_name="$(tr -d '|' < "$OUT/window-name.txt" 2> /dev/null || true)"
-  wm="$(tr -d '|' < "$OUT/startup-wm-class.txt" 2> /dev/null || true)"
+  # Optional evidence: only read what exists, so a failed run does not add shell errors.
+  [ ! -f "$OUT/window-name.txt" ] || window_name="$(tr -d '|' < "$OUT/window-name.txt")"
+  [ ! -f "$OUT/startup-wm-class.txt" ] || declared="$(tr -d '|' < "$OUT/startup-wm-class.txt")"
   {
     echo "### QV.AC Flatpak smoke test"
     echo
@@ -234,7 +243,8 @@ summary() {
     echo "| Origin | ${origin} |"
     echo "| Installed version | ${version} (expected ${SMOKE_EXPECTED_VERSION}, match: ${version_ok}) |"
     echo "| Release type | ${release_type} |"
-    echo "| Startup WM class | ${wm:-unknown} |"
+    echo "| Window class matched | ${APP} |"
+    echo "| Desktop StartupWMClass (diagnostic) | ${declared:-unknown} |"
     echo "| Window | ${window_name:-none} |"
     echo "| Launch | ${launched} |"
   } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
