@@ -1,3 +1,5 @@
 {
-  "only-arches": ["x86_64"]
+  "only-arches": ["x86_64"],
+  "end-of-life": "QVAC Workbench has been renamed. Please switch to io.tether.qvac.",
+  "end-of-life-rebase": "io.tether.qvac"
 }
