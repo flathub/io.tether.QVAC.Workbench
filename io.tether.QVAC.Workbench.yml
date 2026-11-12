@@ -73,9 +73,9 @@ modules:
     sources:
       - type: archive
         url: 
-          https://static.tether.dev/qv.ac/beta-0.21.0-rc.5.257/flatpak/QV.AC-x64-flatpak.tar.gz
+          https://static.tether.dev/qv.ac/beta-0.22.0-rc.0.275/flatpak/QV.AC-x64-flatpak.tar.gz
         sha512: 
-          1e51823debcf7e4021e97f8c40e650ab895b20c7c537b427a83de59e2518476c63cbb373762f2ccb7228245db90bd730ad5280cca8d9dd06ecd099aa110df00c
+          7a9deea7264dfcc3235adeb76200e26428406fd4f06198b965c783ac4afd6e28a65ab081421a0c4fe168991551855e0a357e7e04bd1bb3622be92e4d302ba420
         strip-components: 0
         x-checker-data:
           type: html
