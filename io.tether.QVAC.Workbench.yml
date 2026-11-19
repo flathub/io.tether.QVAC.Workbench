@@ -35,7 +35,8 @@ modules:
       - install -Dm755 obsidian-wrapper /app/bin/obsidian
     sources:
       - type: file
-        url: https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.7/obsidian_1.12.7_amd64.deb
+        url: 
+          https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.7/obsidian_1.12.7_amd64.deb
         sha256: 3644e3ef19bcd23db4d17f7c73311b5245429391a2a48b361da93375f59712b0
         dest-filename: obsidian.deb
       - type: script
@@ -67,8 +68,9 @@ modules:
       - cp -a main /app/main
     sources:
       - type: archive
-        url: https://static.tether.dev/qv.ac/0.21.0/QV.AC-x64-flatpak.tar.gz
-        sha512: e198dd7231c1776b5d5fe024bc8797ee305f8494425717400779c1c148355acac34f8faf1ed976baa1af041bdef1bad5fa9d8b1897a8958343c7eaf631800443
+        url: https://static.tether.dev/qv.ac/0.22.0/QV.AC-x64-flatpak.tar.gz
+        sha512: 
+          9c75413d23fbf01dbabaf8936a6a414b4858981eff04755c5f31c78ba7d82efdc6f647b7bbdb9bd741b664b6cd3c48e0b0931a9a64de7612c9ada19d730cf9a6
         strip-components: 0
         x-checker-data:
           type: html
